@@ -6,115 +6,100 @@ from keras.utils import np_utils
 from keras.models import model_from_json
 from keras.models import load_model
 from keras import backend as K
-K.set_image_dim_ordering('th')
 import numpy as np
 import cv2
 import os
-# import curses
-# import table
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, accuracy_score, roc_curve, auc
 
-# 	#  MAIN LOOP
-# try:
-# 	table.myscreen = curses.initscr()
-# 	table.curses.curs_set(0)
-# 	table.curses.cbreak(); 
-# 	table.curses.noecho(); 
-# 	table.MainInKey()
-# finally:
-# 	table.curses.endwin()
+np.random.seed(100)
 
-answer = np.arange(0, 506, 1)
-batch_size = 32
-nb_classes = 506
-nb_epoch = 2
-img_rows, img_cols = 48, 96
-nb_filters = 32
-nb_pool = 2
-nb_conv = 3
+img = cv2.imread('Data/0.jpeg')
+img_rows, img_cols = img.shape[0], img.shape[1]
 
 def load_train():
 	X_t = []
 	Y_t = []
 	x = 0
+	mxs = 0
 	while x < 506:
-		img = cv2.imread('Data/'+str(x) + '.jpeg', 0)
-		X_t.append(cv2.resize(img, (96, 48)))
+		img = cv2.imread('Data/'+str(x) + '.jpeg')
+		X_t.append(img)
 		Y_t.append(x)
-		x+=1
-	return X_t, Y_t
+		x += 1
+	return train_test_split(X_t, Y_t, test_size = 0.2, random_state = 71)
 
-train_data, train_target = load_train()
+X_train, X_test, y_train, y_test  = load_train()
 
-batch_size = 46
-nb_classes = 506
-nb_epoch = 10#20 min 30 ep
-img_rows, img_cols = 48, 96
-nb_filters = 13
-nb_pool = 2
-nb_conv = 6
+X_train = np.asarray(X_train)
+X_test = np.asarray(X_test)
+y_train = np.asarray(y_train)
+y_test = np.asarray(y_test)
 
-train_data = np.array(train_data, dtype=np.uint8)
-train_target = np.array(train_target, dtype=np.uint8)
+X_test = X_test.astype(float)
+X_test /= 255
 
-train_data = train_data.reshape(train_data.shape[0], 1, img_rows, img_cols)
-train_target = np_utils.to_categorical(train_target, nb_classes)
+X_train = X_train.astype(float)
+X_train /= 255
 
-train_data = train_data.astype('float32')
-train_data /= 255
-model = Sequential()
-if os.path.exists("./model.json") and os.path.exists("./model.h5"):
+y_train = y_train.astype(float)
+y_train /= 506
+
+y_test = y_test.astype(float)
+y_test /= 506
+
+input_shape = (img_rows, img_cols, 3)
+print input_shape
+if os.path.exists("./model_weights/model_t.json") and os.path.exists("./model_weights/model_t.h5"):
 	print("Load model")
-	json_file = open('model.json', 'r')
+	json_file = open('model_weights/model_t.json', 'r')
 	loaded_model_json = json_file.read()
 	json_file.close()
 	model = model_from_json(loaded_model_json)
-	model.load_weights("model.h5")
+	model.load_weights("model_weights/model_t.h5")
+	model.compile(loss="mean_squared_error", optimizer="adam", metrics=["accuracy"])
 else:
-	model.add(Conv2D(nb_filters, (nb_conv, nb_conv),
-			border_mode='valid',
-			input_shape=(1, img_rows, img_cols)))
-	model.add(Activation('relu'))
-	model.add(Conv2D(nb_filters, (nb_conv, nb_conv)))
-	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(nb_pool, nb_pool)))
-	model.add(Dropout(0.25))
+	model = Sequential()
+	model.add(Conv2D(20, kernel_size=(5, 5),
+			activation='relu',
+			input_shape=input_shape))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Dropout(0.2))
+	model.add(Conv2D(20, (5, 5), activation='relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	# model.add(Conv2D(20, (5, 5), activation='relu'))
+	# model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Flatten())
-	model.add(Dense(1012))
-	model.add(Activation('relu'))
-	model.add(Dense(nb_classes))
-	model.add(Activation('softmax'))
+	model.add(Dense(200, activation='sigmoid'))
+	model.add(Dense(100, activation='sigmoid'))
+	model.add(Dense(30, activation='sigmoid'))
+	model.add(Dense(5, activation='sigmoid'))
+	model.add(Dense(1, activation='sigmoid'))
+	model.compile(loss="mean_squared_error", optimizer="adam", metrics=["accuracy"])
+	print(model.summary())
+	model.fit(X_train, y_train, epochs=38)
 
-model.compile(loss='categorical_crossentropy', optimizer='adadelta')
-# model.fit(train_data, train_target, batch_size=batch_size, epochs=nb_epoch, validation_data=(train_data, train_target))
-# model_json = model.to_json()
-# with open("model.json", "w") as json_file:
-#     json_file.write(model_json)
-# model.save_weights("model.h5")
-# print("Saved model to disk")
+	model_json = model.to_json()
+	with open("model_weights/model_t.json", "w") as json_file:
+		json_file.write(model_json)
+	model.save_weights("model_weights/model_t.h5")
+	print("Saved model to disk")
+model.fit(X_train, y_train, epochs=38)
 
+predicted = model.predict(X_test)
+alls = len(predicted)
+i = 0
+while i < alls:
+	p = int(predicted[i] * 506)
+	y = int(y_test[i] * 506)
+	print p, ' == ',y
+	i += 1
 
-
-def return_num(ar):
-	max_ = ar.max()
-	i = 0
-	for x in ar:
-		if x == max_:
-			return i
-		i+= 1
-	return 0
-img = cv2.imread('x.jpeg', 0)
-xax = []
-xax.append(cv2.resize(img, (96, 48)))
-
-xax = np.array(xax, dtype=np.uint8)
-xax = xax.reshape(xax.shape[0], 1, img_rows, img_cols)
-xax = xax.astype('float32')
-xax /= 255
-
-
-res = model.predict(xax)
-# print(res[0])
-# g = res[0].max()
-# print(g)
-print(return_num(res[0]))
-# print(return_num(res[1]))
+y_test = y_test.astype(float)
+print 'mean_squared_error = ', mean_squared_error(y_test, predicted)
+if raw_input('save:') == 'y':
+	model_json = model.to_json()
+	with open("model_weights/model_t.json", "w") as json_file:
+		json_file.write(model_json)
+	model.save_weights("model_weights/model_t.h5")
+	print("Saved model to disk")
